@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- App Theme Colors -->
+    <color name="primary_color">#FF2196F3</color>
+    <color name="primary_dark">#FF1976D2</color>
+    <color name="accent_color">#FF03DAC5</color>
+    
+    <!-- Text Colors -->
+    <color name="primary_text">#FFFFFFFF</color>
+    <color name="secondary_text">#FFB0B0B0</color>
+    <color name="status_text">#FF4CAF50</color>
+    <color name="error_text">#FFF44336</color>
+    
+    <!-- Background Colors -->
+    <color name="background_color">#FF1E1E1E</color>
+    <color name="card_background">#FF2D2D2D</color>
+    <color name="player_background">#FF000000</color>
+    
+    <!-- Status Colors -->
+    <color name="success_color">#FF4CAF50</color>
+    <color name="warning_color">#FFFF9800</color>
+    <color name="error_color">#FFF44336</color>
+    <color name="info_color">#FF2196F3</color>
+</resources>
