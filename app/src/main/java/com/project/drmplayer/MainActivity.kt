@@ -12,6 +12,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelProvider
 import com.google.android.exoplayer2.ExoPlayer // Import ExoPlayer for casting
 import com.google.android.exoplayer2.ui.PlayerView
+import com.project.drmplayer.viewmodel.PlayerViewModel
+import com.project.drmplayer.viewmodel.PlayerViewModelFactory
 
 class MainActivity : AppCompatActivity() {
 

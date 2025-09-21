@@ -1,7 +1,8 @@
-package com.project.drmplayer
+package com.project.drmplayer.viewmodel
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.ViewModel
+import com.project.drmplayer.controller.IPlayerController
 
 // Event wrapper for single-fire LiveData events
 open class Event<out T>(private val content: T) {
