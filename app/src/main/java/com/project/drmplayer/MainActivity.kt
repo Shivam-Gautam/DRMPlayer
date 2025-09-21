@@ -9,23 +9,15 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.google.android.exoplayer2.C
-import com.google.android.exoplayer2.ExoPlayer
-import com.google.android.exoplayer2.MediaItem
-import com.google.android.exoplayer2.MediaItem.DrmConfiguration
-import com.google.android.exoplayer2.Player
-import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
+import androidx.lifecycle.ViewModelProvider
+import com.google.android.exoplayer2.ExoPlayer // Import ExoPlayer for casting
 import com.google.android.exoplayer2.ui.PlayerView
-import com.google.android.exoplayer2.util.MimeTypes
 
 class MainActivity : AppCompatActivity() {
 
-    private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
     private lateinit var spinnerResolutions: Spinner
-    private lateinit var trackSelector: DefaultTrackSelector
     private var resolutionAdapter: ArrayAdapter<String>? = null
-    private var availableResolutions = mutableListOf<String>()
 
     // UI Elements
     private lateinit var etVideoUrl: EditText
@@ -33,14 +25,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnPlayCustom: Button
     private lateinit var btnPlayDemo: Button
 
-    private val demoMpdUrl =
-        "https://bitmovin-a.akamaihd.net/content/art-of-motion_drm/mpds/11331.mpd"
-    private val demoLicenseUrl = "https://cwip-shaka-proxy.appspot.com/no_auth"
+    private lateinit var viewModel: PlayerViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContentView(R.layout.activity_main)
+
+        // Initialize ViewModel using the factory
+        val factory = PlayerViewModelFactory(application)
+        viewModel = ViewModelProvider(this, factory)[PlayerViewModel::class.java]
 
         // Initialize UI elements
         playerView = findViewById(R.id.player_view)
@@ -50,18 +43,35 @@ class MainActivity : AppCompatActivity() {
         btnPlayCustom = findViewById(R.id.btnPlayCustom)
         btnPlayDemo = findViewById(R.id.btnPlayDemo)
 
-        trackSelector = DefaultTrackSelector(this)
-
         // Initialize resolution spinner
-        resolutionAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, availableResolutions)
+        resolutionAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, mutableListOf<String>())
         resolutionAdapter?.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerResolutions.adapter = resolutionAdapter
+
+        // Set up observers
+        viewModel.playerInstance.observe(this) { player ->
+            // Cast the player instance to ExoPlayer. PlayerView expects ExoPlayer.
+            playerView.player = player as? ExoPlayer
+        }
+
+        viewModel.availableResolutions.observe(this) { resolutions ->
+            resolutionAdapter?.clear()
+            resolutionAdapter?.addAll(resolutions)
+            resolutionAdapter?.notifyDataSetChanged()
+        }
+
+        viewModel.toastMessage.observe(this) { event ->
+            event.getContentIfNotHandled()?.let {
+                Toast.makeText(this, it, Toast.LENGTH_SHORT).show()
+            }
+        }
 
         // Set up resolution selection listener
         spinnerResolutions.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                if (position > 0) { // Skip "Select Resolution" option
-                    selectResolution(position - 1)
+                val selectedResolution = resolutionAdapter?.getItem(position)
+                if (selectedResolution != null && selectedResolution != "Select Resolution") {
+                     viewModel.selectResolution(selectedResolution)
                 }
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -73,7 +83,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnPlayDemo.setOnClickListener {
-            playDemoVideo()
+            // Call playDemoVideo on ViewModel, which now uses the controller
+            viewModel.playDemoVideo()
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { view, insets ->
@@ -83,156 +94,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-    private fun initializePlayer() {
-        if (player == null) {
-            player = ExoPlayer.Builder(this)
-                .setTrackSelector(trackSelector)
-                .build()
-            playerView.player = player
-
-            // Add player listener to detect when tracks are available
-            player?.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    super.onPlaybackStateChanged(playbackState)
-                    if (playbackState == Player.STATE_READY) {
-                        updateAvailableResolutions()
-                    }
-                }
-            })
-        }
-    }
-
     private fun playCustomVideo() {
         val videoUrl = etVideoUrl.text.toString().trim()
         val licenseUrl = etLicenseUrl.text.toString().trim()
 
+        // ViewModel now handles empty URL check via controller, but immediate UI feedback can stay if desired
         if (videoUrl.isEmpty()) {
             Toast.makeText(this, "Please enter a video URL", Toast.LENGTH_SHORT).show()
             return
         }
-
-        initializePlayer()
-        loadVideo(videoUrl, licenseUrl)
-    }
-
-    private fun playDemoVideo() {
-        initializePlayer()
-        loadVideo(demoMpdUrl, demoLicenseUrl)
-        Toast.makeText(this, "Playing demo DRM content", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun loadVideo(videoUrl: String, licenseUrl: String) {
-        player?.let { exoPlayer ->
-            val mediaItemBuilder = MediaItem.Builder()
-                .setUri(videoUrl)
-
-            // Add DRM configuration if license URL is provided
-            if (licenseUrl.isNotEmpty()) {
-                val drmConfig = DrmConfiguration.Builder(C.WIDEVINE_UUID)
-                    .setLicenseUri(licenseUrl)
-                    .build()
-                mediaItemBuilder.setDrmConfiguration(drmConfig)
-            }
-
-            // Set MIME type based on URL
-            val mimeType = when {
-                videoUrl.contains(".mpd") -> MimeTypes.APPLICATION_MPD
-                videoUrl.contains(".m3u8") -> MimeTypes.APPLICATION_M3U8
-                else -> MimeTypes.APPLICATION_MPD // Default to DASH
-            }
-            mediaItemBuilder.setMimeType(mimeType)
-
-            val mediaItem = mediaItemBuilder.build()
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
-        }
+        viewModel.initializePlayer() // Ensure player is initialized via ViewModel and Controller
+        viewModel.loadVideo(videoUrl, licenseUrl)
     }
 
     override fun onStart() {
         super.onStart()
-        initializePlayer()
+        viewModel.initializePlayer()
     }
 
     override fun onResume() {
         super.onResume()
-        initializePlayer()
+        viewModel.initializePlayer()
     }
 
     override fun onPause() {
         super.onPause()
-        releasePlayer()
+        viewModel.releasePlayer()
     }
 
     override fun onStop() {
         super.onStop()
-        releasePlayer()
-    }
-
-    private fun releasePlayer() {
-        player?.release()
-        player = null
-    }
-
-    private fun updateAvailableResolutions() {
-        val trackGroups = trackSelector.currentMappedTrackInfo
-        availableResolutions.clear()
-        availableResolutions.add("Select Resolution") // Default option
-
-        if (trackGroups != null) {
-            val rendererIndex = 0 // Video renderer is typically at index 0
-            val trackGroupArray = trackGroups.getTrackGroups(rendererIndex)
-            
-            for (groupIndex in 0 until trackGroupArray.length) {
-                val trackGroup = trackGroupArray.get(groupIndex)
-                for (trackIndex in 0 until trackGroup.length) {
-                    val format = trackGroup.getFormat(trackIndex)
-                    if (format.height > 0) {
-                        val resolution = "${format.width}x${format.height}"
-                        if (!availableResolutions.contains(resolution)) {
-                            availableResolutions.add(resolution)
-                        }
-                    }
-                }
-            }
-        }
-
-        runOnUiThread {
-            resolutionAdapter?.notifyDataSetChanged()
-        }
-    }
-
-    private fun selectResolution(resolutionIndex: Int) {
-        if (resolutionIndex >= availableResolutions.size - 1) return // Skip "Select Resolution" option
-        
-        val trackGroups = trackSelector.currentMappedTrackInfo
-        if (trackGroups == null) return
-
-        val rendererIndex = 0 // Video renderer
-        val trackGroupArray = trackGroups.getTrackGroups(rendererIndex)
-        val resolutionToFind = availableResolutions[resolutionIndex + 1] // +1 to skip default option
-        
-        for (groupIndex in 0 until trackGroupArray.length) {
-            val trackGroup = trackGroupArray.get(groupIndex)
-            for (trackIndex in 0 until trackGroup.length) {
-                val format = trackGroup.getFormat(trackIndex)
-                if (format.height > 0) {
-                    val resolution = "${format.width}x${format.height}"
-                    if (resolution == resolutionToFind) {
-                        val selectionOverride = DefaultTrackSelector.SelectionOverride(groupIndex, trackIndex)
-                        val parameters = trackSelector.parameters.buildUpon()
-                            .setSelectionOverride(rendererIndex, trackGroupArray, selectionOverride)
-                            .build()
-                        trackSelector.setParameters(parameters)
-                        
-                        runOnUiThread {
-                            Toast.makeText(this, "Resolution changed to $resolution", Toast.LENGTH_SHORT).show()
-                        }
-                        return
-                    }
-                }
-            }
-        }
+        viewModel.releasePlayer()
     }
 }
